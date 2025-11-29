@@ -1,26 +1,51 @@
+@import url("https://use.typekit.net/ofb5bji.css");
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@keyframes gradient {
+  0% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+  100% {
+    background-position: 0% 40%;
+  }
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes glow {
+  0% {
+    transform: translate(-10%, -10%) scale(1);
+  }
+  50% {
+    transform: translate(10%, 10%) scale(1.15);
+  }
+  100% {
+    transform: translate(-10%, -10%) scale(1);
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  background: linear-gradient(-60deg, #0a4050, #031d2b, #04344a, #021420, #0a3848, #041e2d);
+  background-size: 600% 600%;
+  animation: gradient 35s ease-in-out infinite;
+  background-attachment: fixed;
+  color: white;
+  font-family: "amplitude", sans-serif;
+  font-weight: 300;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -30% 0;
+  background: radial-gradient(circle at 20% 20%, rgba(25, 224, 255, 0.25), transparent 55%),
+    radial-gradient(circle at 80% 20%, rgba(82, 115, 255, 0.2), transparent 45%),
+    radial-gradient(circle at 50% 80%, rgba(26, 181, 150, 0.2), transparent 50%);
+  filter: blur(60px);
+  pointer-events: none;
+  animation: glow 45s ease-in-out infinite;
 }
