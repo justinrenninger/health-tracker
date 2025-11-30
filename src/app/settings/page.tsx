@@ -2,11 +2,28 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { db, type AppSchema } from '@/lib/instantdb';
+import { db } from '@/lib/instantdb';
 import { AppTabs } from '@/components/AppTabs';
 
-type UserRecord = AppSchema['entities']['users']['shape'];
-type TargetRecord = AppSchema['entities']['targets']['shape'];
+type UserRecord = {
+  id?: string;
+  authId?: string;
+  displayName?: string | null;
+  email?: string | null;
+  weightGoal?: number | null;
+  reminderTimes?: unknown;
+  integrationTokens?: unknown;
+};
+
+type TargetRecord = {
+  id?: string;
+  userId?: string;
+  effectiveDate?: string | Date;
+  steps?: number | null;
+  calories?: number | null;
+  protein?: number | null;
+  workoutsPerDay?: number | null;
+};
 
 type InstantErrorPayload = {
   body?: {

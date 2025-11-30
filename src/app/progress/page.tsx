@@ -1,18 +1,50 @@
 'use client';
 
 import { useMemo } from 'react';
-import { db, type AppSchema } from '@/lib/instantdb';
+import { db } from '@/lib/instantdb';
 import { AppTabs } from '@/components/AppTabs';
 
-type DailyMetric = AppSchema['entities']['dailyMetrics']['shape'];
-type TargetRecord = AppSchema['entities']['targets']['shape'];
-type UserRecord = AppSchema['entities']['users']['shape'];
+type DailyMetric = {
+  id?: string;
+  userId?: string;
+  date?: string | Date;
+  entryKey?: string | null;
+  steps?: number | null;
+  calories?: number | null;
+  protein?: number | null;
+  workoutMinutes?: number | null;
+  weight?: number | null;
+  source?: string | null;
+  manual?: boolean | null;
+  notes?: string | null;
+};
+
+type TargetRecord = {
+  id?: string;
+  userId?: string;
+  effectiveDate?: string | Date;
+  steps?: number | null;
+  calories?: number | null;
+  protein?: number | null;
+  workoutsPerDay?: number | null;
+};
+
+type UserRecord = {
+  id?: string;
+  authId?: string;
+  displayName?: string | null;
+  email?: string | null;
+  weightGoal?: number | null;
+  reminderTimes?: unknown;
+  integrationTokens?: unknown;
+};
 
 const MAX_POINTS = 30;
 
-const formatShortDate = (value?: string | null) => {
+const formatShortDate = (value?: string | Date | null) => {
   if (!value) return '';
-  return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+  const date = typeof value === 'string' ? new Date(`${value}T00:00:00`) : value;
+  return date.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
   });

@@ -91,7 +91,7 @@ const formatCarouselDate = (value: string) =>
 type StatusColor = 'green' | 'yellow' | 'red';
 type GoalStatus = { color: StatusColor; message: string };
 
-const formatNumber = (value?: number, decimals = 0) =>
+const formatNumber = (value?: number | null, decimals = 0) =>
   value != null ? value.toLocaleString(undefined, { maximumFractionDigits: decimals }) : '';
 
 // Add units to display values without affecting input editing
