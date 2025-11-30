@@ -245,7 +245,7 @@ export default function LogPage() {
       const freshDate = new Date();
       const newToday = isoDateString(freshDate);
       setLocalDate(freshDate);
-      setSelectedDate((prev) => (prev >= newToday ? newToday : prev));
+      setSelectedDate((prev) => (prev && prev >= newToday ? newToday : prev ?? newToday));
     }, timeout);
     return () => clearTimeout(timer);
   }, [localDate]);
