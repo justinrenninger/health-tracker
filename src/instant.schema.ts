@@ -20,6 +20,9 @@ const _schema = i.schema({
       weightGoal: i.number().optional(),
       reminderTimes: i.json().optional(),
       integrationTokens: i.json().optional(),
+      integrationPreferences: i.json().optional(),
+      integrationStatus: i.json().optional(),
+      integrationLastSync: i.date().optional(),
     }),
     dailyMetrics: i.entity({
       userId: i.string().indexed(),
@@ -32,6 +35,9 @@ const _schema = i.schema({
       weight: i.number().optional(),
       source: i.string().optional(),
       manual: i.boolean().optional(),
+      manualOverride: i.boolean().optional(),
+      autoSyncedAt: i.date().optional(),
+      integrationMeta: i.json().optional(),
       notes: i.string().optional(),
     }),
     targets: i.entity({

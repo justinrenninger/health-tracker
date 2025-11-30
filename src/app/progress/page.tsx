@@ -3,7 +3,6 @@
 import { useMemo, useState, useCallback } from 'react';
 import { db } from '@/lib/instantdb';
 import { AppTabs } from '@/components/AppTabs';
-
 type DailyMetric = {
   id?: string;
   userId?: string;
@@ -16,6 +15,7 @@ type DailyMetric = {
   weight?: number | null;
   source?: string | null;
   manual?: boolean | null;
+  autoSyncedAt?: string | Date | null;
   notes?: string | null;
 };
 
@@ -36,7 +36,6 @@ type UserRecord = {
   email?: string | null;
   weightGoal?: number | null;
   reminderTimes?: unknown;
-  integrationTokens?: unknown;
 };
 
 const MAX_POINTS = 400;

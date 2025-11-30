@@ -7,7 +7,6 @@ import { id as instantId } from '@instantdb/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppTabs } from '@/components/AppTabs';
 import Image from 'next/image';
-
 type DailyMetric = {
   id?: string;
   userId?: string;
@@ -20,6 +19,8 @@ type DailyMetric = {
   weight?: number | null;
   source?: string | null;
   manual?: boolean | null;
+  manualOverride?: boolean | null;
+  autoSyncedAt?: string | Date | null;
   notes?: string | null;
 };
 
@@ -567,7 +568,9 @@ export default function LogPage() {
         workoutMinutes: numericOrNull(getCurrentValue('workoutMinutes')) ?? undefined,
         weight: numericOrNull(getCurrentValue('weight')) ?? undefined,
         manual: true,
+        manualOverride: true,
         source: 'manual',
+        autoSyncedAt: null,
       };
 
       await db.transact(db.tx.dailyMetrics[entryId].update(updatedEntry));
@@ -588,6 +591,7 @@ export default function LogPage() {
       setSaveMessage(getErrorMessage(err, 'Unable to save right now.'));
     }
   };
+
 
   const canGoNext = selectedDate ? selectedDate < todayString : false;
   const relativeLabel = selectedDate ? getRelativeLabel(selectedDate, todayString) : '';
@@ -738,10 +742,12 @@ export default function LogPage() {
               className="flex items-start justify-between border-b border-white/10 pb-3"
             >
               <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-white/60" style={{ fontFamily: '"amplitude", sans-serif', fontWeight: 300, fontSize: '20px', letterSpacing: 0 }}>
-                    {metric.label}
-                  </span>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white/60" style={{ fontFamily: '"amplitude", sans-serif', fontWeight: 300, fontSize: '20px', letterSpacing: 0 }}>
+                      {metric.label}
+                    </span>
+                  </div>
                   {metric.hasCheckmark && (
                     <Image src="/checkmark.svg" alt="Complete" width={19} height={19} />
                   )}

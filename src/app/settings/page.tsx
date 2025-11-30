@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { db } from '@/lib/instantdb';
 import { id as instantId } from '@instantdb/react';
 import { AppTabs } from '@/components/AppTabs';
-
 type UserRecord = {
   id?: string;
   authId?: string;
@@ -13,7 +12,6 @@ type UserRecord = {
   email?: string | null;
   weightGoal?: number | null;
   reminderTimes?: unknown;
-  integrationTokens?: unknown;
 };
 
 type TargetRecord = {
@@ -51,6 +49,15 @@ const DAILY_DEFAULTS = {
   protein: 165,
   workoutsPerDay: 1,
 };
+
+const TARGET_FIELD_OPTIONS = [
+  { key: 'steps', label: 'Steps per day' },
+  { key: 'calories', label: 'Calories (kcal)' },
+  { key: 'protein', label: 'Protein (g)' },
+  { key: 'workoutsPerDay', label: 'Workouts per day' },
+] as const;
+
+type TargetFieldKey = (typeof TARGET_FIELD_OPTIONS)[number]['key'];
 
 const numberOrUndefined = (value: string) => {
   const parsed = Number(value);
@@ -97,7 +104,6 @@ export default function SettingsPage() {
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
   const [targetsMessage, setTargetsMessage] = useState('');
-
   useEffect(() => {
     if (!auth.isLoading && !auth.user) {
       router.replace('/login');
@@ -260,14 +266,7 @@ export default function SettingsPage() {
           </div>
           <form className="mt-6 space-y-4" onSubmit={handleTargetsSave}>
             <div className="grid gap-4 md:grid-cols-2">
-              {(
-                [
-                  { key: 'steps', label: 'Steps per day' },
-                  { key: 'calories', label: 'Calories (kcal)' },
-                  { key: 'protein', label: 'Protein (g)' },
-                  { key: 'workoutsPerDay', label: 'Workouts per day' },
-                ] as const
-              ).map((field) => (
+              {TARGET_FIELD_OPTIONS.map((field) => (
                 <label
                   key={field.key}
                   className="flex flex-col gap-2 text-sm font-medium text-white/80"
@@ -301,6 +300,8 @@ export default function SettingsPage() {
             )}
           </form>
         </section>
+
+        {/* Integrations removed */}
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
