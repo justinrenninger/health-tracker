@@ -137,7 +137,6 @@ export default function SettingsPage() {
       targetIdRef.current = targetId;
       await db.transact(
         db.tx.targets[targetId].update({
-          id: targetId,
           userId: auth.user.id,
           effectiveDate: new Date(),
           steps: numberOrUndefined((formData.get('steps') as string) ?? ''),
