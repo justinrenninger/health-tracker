@@ -589,13 +589,13 @@ export default function LogPage() {
     }
   };
 
-  const canGoNext = selectedDate < todayString;
-  const relativeLabel = getRelativeLabel(selectedDate, todayString);
+  const canGoNext = selectedDate ? selectedDate < todayString : false;
+  const relativeLabel = selectedDate ? getRelativeLabel(selectedDate, todayString) : '';
 
   const handleShiftDate = (delta: number) => {
     if (delta > 0 && !canGoNext) return;
     setCarouselDirection(delta > 0 ? 1 : -1);
-    setSelectedDate((prev) => prev ? addDays(prev, delta) : prev);
+    setSelectedDate((prev) => (prev ? addDays(prev, delta) : todayString));
     setEditingField(null);
     setSaveStatus('idle');
     setSaveMessage('');
