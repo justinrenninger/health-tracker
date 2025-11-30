@@ -2,14 +2,36 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { db, type AppSchema } from '@/lib/instantdb';
+import { db } from '@/lib/instantdb';
 import { id as instantId } from '@instantdb/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppTabs } from '@/components/AppTabs';
 import Image from 'next/image';
 
-type DailyMetric = AppSchema['entities']['dailyMetrics']['shape'];
-type TargetRecord = AppSchema['entities']['targets']['shape'];
+type DailyMetric = {
+  id?: string;
+  userId?: string;
+  date?: string | Date;
+  entryKey?: string | null;
+  steps?: number | null;
+  calories?: number | null;
+  protein?: number | null;
+  workoutMinutes?: number | null;
+  weight?: number | null;
+  source?: string | null;
+  manual?: boolean | null;
+  notes?: string | null;
+};
+
+type TargetRecord = {
+  id?: string;
+  userId?: string;
+  effectiveDate?: string | Date;
+  steps?: number | null;
+  calories?: number | null;
+  protein?: number | null;
+  workoutsPerDay?: number | null;
+};
 
 type InstantErrorPayload = {
   body?: {
