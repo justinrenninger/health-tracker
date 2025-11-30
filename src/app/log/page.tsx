@@ -61,9 +61,27 @@ const DAILY_DEFAULTS = {
 
 type MetricField = 'steps' | 'calories' | 'protein' | 'workoutMinutes' | 'weight';
 
-const isoDateString = (date: Date) => date.toISOString().slice(0, 10);
+const isoDateString = (date: Date | null | undefined) => {
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
-const parseIsoDate = (value: string) => new Date(`${value}T00:00:00`);
+const parseIsoDate = (value: string | null | undefined) => {
+  if (!value) return new Date();
+  const [yearStr, monthStr, dayStr] = value.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return new Date();
+  }
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
 
 const addDays = (value: string, delta: number) => {
   const next = parseIsoDate(value);
@@ -181,8 +199,9 @@ const getStepsStatus = (actual?: number, goal?: number): GoalStatus => {
 export default function LogPage() {
   const router = useRouter();
   const auth = db.useAuth();
-  const [localDate, setLocalDate] = useState(() => new Date());
-  const [selectedDate, setSelectedDate] = useState(() => isoDateString(new Date()));
+  const userId = auth.user?.id ?? null;
+  const [localDate, setLocalDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [lastSavedEntry, setLastSavedEntry] = useState<DailyMetric | null>(null);
   const [carouselDirection, setCarouselDirection] = useState<1 | -1>(1);
   const [editingField, setEditingField] = useState<MetricField | null>(null);
@@ -202,7 +221,20 @@ export default function LogPage() {
     workoutMinutes: null,
     weight: null,
   });
-  const todayString = isoDateString(localDate);
+  const entryMetaRef = useRef<{ id: string; entryKey: string } | null>(null);
+  const entryKeyValue = useMemo(
+    () => (userId && selectedDate ? `${userId}-${selectedDate}` : null),
+    [userId, selectedDate],
+  );
+  
+  // Initialize date on client side only to avoid hydration mismatch
+  useEffect(() => {
+    const now = new Date();
+    setLocalDate(now);
+    setSelectedDate(isoDateString(now));
+  }, []);
+  
+  const todayString = localDate ? isoDateString(localDate) : '';
 
   useEffect(() => {
     const now = new Date();
@@ -219,26 +251,25 @@ export default function LogPage() {
   }, [localDate]);
 
   const query =
-    auth.user && auth.user.id
+    userId && entryKeyValue
       ? {
           dailyMetrics: {
             $: {
               where: {
-                userId: auth.user.id,
-                date: new Date(selectedDate),
+                entryKey: entryKeyValue,
               },
               limit: 1,
             },
           },
           targets: {
             $: {
-              where: { userId: auth.user.id },
+              where: { userId },
               limit: 1,
             },
           },
           users: {
             $: {
-              where: { authId: auth.user.id },
+              where: { authId: userId },
               limit: 1,
             },
           },
@@ -250,14 +281,16 @@ export default function LogPage() {
   const personalTarget = data?.targets?.[0] as TargetRecord | undefined;
   const userProfile = data?.users?.[0] as { weightGoal?: number } | undefined;
 
+  const previousEntryKey =
+    userId && selectedDate ? `${userId}-${addDays(selectedDate, -1)}` : null;
+
   const previousQuery =
-    auth.user && auth.user.id
+    userId && previousEntryKey
       ? {
           dailyMetrics: {
             $: {
               where: {
-                userId: auth.user.id,
-                date: new Date(addDays(selectedDate, -1)),
+                entryKey: previousEntryKey,
               },
               limit: 1,
             },
@@ -300,8 +333,75 @@ export default function LogPage() {
     );
   }, [existingEntry, lastSavedEntry, selectedDate]);
 
+  const entryKeyTrackerRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (entryKeyValue !== entryKeyTrackerRef.current) {
+      entryKeyTrackerRef.current = entryKeyValue;
+      entryMetaRef.current =
+        summaryEntry?.id && entryKeyValue
+          ? {
+              id: summaryEntry.id,
+              entryKey: summaryEntry.entryKey ?? entryKeyValue,
+            }
+          : null;
+      return;
+    }
+    if (summaryEntry?.id && entryKeyValue) {
+      entryMetaRef.current = {
+        id: summaryEntry.id,
+        entryKey: summaryEntry.entryKey ?? entryKeyValue,
+      };
+    }
+  }, [summaryEntry, entryKeyValue]);
+
+  // Sync editValues with persisted data when not actively editing
+  useEffect(() => {
+    if (editingField) return;
+
+    if (summaryEntry) {
+      setEditValues({
+        steps:
+          summaryEntry.steps != null
+            ? formatWithUnit('steps', formatWithCommas(summaryEntry.steps.toString()))
+            : '',
+        calories:
+          summaryEntry.calories != null
+            ? formatWithUnit('calories', formatWithCommas(summaryEntry.calories.toString()))
+            : '',
+        protein:
+          summaryEntry.protein != null
+            ? formatWithUnit('protein', formatWithCommas(summaryEntry.protein.toString()))
+            : '',
+        workoutMinutes:
+          summaryEntry.workoutMinutes != null
+            ? formatWithUnit(
+                'workoutMinutes',
+                formatWithCommas(summaryEntry.workoutMinutes.toString()),
+              )
+            : '',
+        weight:
+          summaryEntry.weight != null
+            ? formatWithUnit('weight', summaryEntry.weight.toString())
+            : '',
+      });
+    } else {
+      setEditValues({
+        steps: '',
+        calories: '',
+        protein: '',
+        workoutMinutes: '',
+        weight: '',
+      });
+    }
+  }, [summaryEntry, editingField]);
+
   // Get current values from entry or use empty strings
   const getCurrentValue = (field: MetricField): string => {
+    // Prefer the live edit buffer if it has content
+    if (editValues[field]) {
+      return editValues[field];
+    }
     if (editingField === field) {
       return editValues[field];
     }
@@ -373,24 +473,32 @@ export default function LogPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetValues, previousEntry, personalTarget, summaryEntry, editingField, editValues, getCurrentValue]);
 
-  const handleFieldClick = (field: MetricField) => {
-    // Only use the saved value if it exists, otherwise start with empty string
-    const savedValue = summaryEntry?.[field];
-    let currentValue = savedValue != null ? savedValue.toString() : '';
-    
-    if (currentValue) {
-      currentValue =
-        field === 'weight' ? currentValue : formatWithCommas(currentValue);
+  const handleFieldFocus = (field: MetricField) => {
+    setEditingField(field);
+
+    // If there's already a live value, keep it; otherwise seed from saved entry
+    const existingValue = editValues[field];
+    if (!existingValue) {
+      const savedValue = summaryEntry?.[field];
+      let currentValue = savedValue != null ? savedValue.toString() : '';
+
+      if (currentValue && field !== 'weight') {
+        currentValue = formatWithCommas(currentValue);
+      }
+      if (currentValue) {
+        currentValue = formatWithUnit(field, currentValue);
+      }
+
+      setEditValues((prev) => ({ ...prev, [field]: currentValue }));
     }
     
-    setEditValues((prev) => ({ ...prev, [field]: currentValue }));
-    setEditingField(field);
-    setTimeout(() => {
-      inputRefs.current[field]?.focus();
-      if (currentValue) {
-        inputRefs.current[field]?.select();
+    requestAnimationFrame(() => {
+      const input = inputRefs.current[field];
+      if (input) {
+        const length = input.value.length;
+        input.setSelectionRange(0, length);
       }
-    }, 0);
+    });
   };
 
   const handleFieldChange = (field: MetricField, value: string) => {
@@ -402,8 +510,15 @@ export default function LogPage() {
   };
 
   const handleFieldBlur = async () => {
-    setEditingField(null);
+    const currentField = editingField;
+    if (!currentField) return;
+    
+    // Save the entry
     await saveEntry();
+    
+    // Don't clear editing state immediately - let the value persist
+    // The input will still show the editValues until user refocuses or changes date
+    setEditingField(null);
   };
 
   const handleFieldKeyDown = (field: MetricField, e: React.KeyboardEvent) => {
@@ -426,20 +541,26 @@ export default function LogPage() {
   };
 
   const saveEntry = async () => {
-    if (!auth.user) return;
+    if (!userId || !selectedDate || !entryKeyValue) return;
     
     setSaveStatus('saving');
     setSaveMessage('');
-    const entryId = existingEntry?.id ?? instantId();
+    const baseEntry =
+      summaryEntry ??
+      existingEntry ??
+      lastSavedEntry ??
+      entryMetaRef.current ??
+      null;
+    const entryId = baseEntry?.id ?? instantId();
     
     try {
       // Preserve existing values and only update the edited ones
       const updatedEntry: DailyMetric = {
-        ...(existingEntry ?? { id: entryId }),
+        ...(baseEntry ?? { id: entryId }),
         id: entryId,
-        userId: auth.user.id,
-        date: new Date(selectedDate).toISOString(),
-        entryKey: existingEntry?.entryKey ?? `${auth.user.id}-${selectedDate}`,
+        userId,
+        date: new Date(selectedDate),
+        entryKey: baseEntry?.entryKey ?? entryKeyValue,
         steps: numericOrNull(getCurrentValue('steps')) ?? undefined,
         calories: numericOrNull(getCurrentValue('calories')) ?? undefined,
         protein: numericOrNull(getCurrentValue('protein')) ?? undefined,
@@ -453,6 +574,10 @@ export default function LogPage() {
       setSaveStatus('saved');
       setSaveMessage('Saved!');
       setLastSavedEntry(updatedEntry);
+      entryMetaRef.current = {
+        id: updatedEntry.id!,
+        entryKey: updatedEntry.entryKey ?? entryKeyValue,
+      };
       
       setTimeout(() => {
         setSaveStatus('idle');
@@ -470,14 +595,14 @@ export default function LogPage() {
   const handleShiftDate = (delta: number) => {
     if (delta > 0 && !canGoNext) return;
     setCarouselDirection(delta > 0 ? 1 : -1);
-    setSelectedDate((prev) => addDays(prev, delta));
+    setSelectedDate((prev) => prev ? addDays(prev, delta) : prev);
     setEditingField(null);
     setSaveStatus('idle');
     setSaveMessage('');
   };
 
-  const prevDate = addDays(selectedDate, -1);
-  const nextDate = addDays(selectedDate, 1);
+  const prevDate = selectedDate ? addDays(selectedDate, -1) : '';
+  const nextDate = selectedDate ? addDays(selectedDate, 1) : '';
 
   const statusColors: Record<StatusColor, string> = {
     green: 'bg-[#19FF94]',
@@ -485,7 +610,7 @@ export default function LogPage() {
     red: 'bg-[#FF5252]',
   };
 
-  if (auth.isLoading) {
+  if (auth.isLoading || !selectedDate) {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <p className="text-sm text-white/60">Loading...</p>
@@ -498,7 +623,7 @@ export default function LogPage() {
   }
 
   return (
-    <main className="min-h-screen pb-12 pt-6">
+    <main className="min-h-screen pb-12 pt-6" style={{ minHeight: '100dvh' }}>
       <div className="mx-auto max-w-2xl px-4">
         <AppTabs />
 
@@ -507,32 +632,37 @@ export default function LogPage() {
           <p className="uppercase text-white/50" style={{ fontFamily: '"amplitude", sans-serif', fontWeight: 300, fontSize: '18px', letterSpacing: 0 }}>
             {relativeLabel}
           </p>
-          <div className="relative flex w-full items-center justify-between" style={{ paddingBottom: '12px' }}>
+          <div className="relative w-full" style={{ paddingBottom: '12px' }}>
             <button
               type="button"
               onClick={() => handleShiftDate(-1)}
-              className="absolute left-0 text-white/40 transition hover:text-white"
+              className="absolute left-0 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white"
             >
               <Image src="/arrow-left-right.svg" alt="Previous" width={14} height={24} style={{ transform: 'rotate(180deg)' }} />
             </button>
 
-            <div className="flex w-full items-center justify-center gap-6">
-              <span
-                className="uppercase"
+              <div className="mx-16 flex items-center justify-center gap-6">
+              <button
+                type="button"
+                onClick={() => handleShiftDate(-1)}
+                className="uppercase text-white/50 transition hover:text-white"
                 style={{ 
                   fontFamily: '"amplitude-extra-compressed", sans-serif', 
                   fontWeight: 700, 
-                  fontSize: '46px',
+                  fontSize: '36px',
                   letterSpacing: 0,
                   opacity: 0.5,
                   background: 'linear-gradient(to top, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 1) 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
+                  backgroundClip: 'text',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {formatCarouselDate(prevDate)}
-              </span>
+              </button>
 
               <div className="relative overflow-hidden" style={{ width: '220px', height: '60px' }}>
                 <AnimatePresence initial={false} custom={carouselDirection}>
@@ -551,30 +681,35 @@ export default function LogPage() {
                 </AnimatePresence>
               </div>
 
-              <span
-                className="uppercase"
+              <button
+                type="button"
+                onClick={() => handleShiftDate(1)}
+                disabled={!canGoNext}
+                className="uppercase transition hover:text-white disabled:cursor-not-allowed"
                 style={{ 
                   fontFamily: '"amplitude-extra-compressed", sans-serif', 
                   fontWeight: 700, 
-                  fontSize: '46px',
+                  fontSize: '36px',
                   letterSpacing: 0,
-                  opacity: canGoNext ? 0.5 : 0,
+                  opacity: canGoNext ? 0.5 : 0.2,
                   background: 'linear-gradient(to top, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 1) 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
-                  visibility: canGoNext ? 'visible' : 'hidden'
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {formatCarouselDate(nextDate)}
-              </span>
+              </button>
             </div>
 
             <button
               type="button"
               onClick={() => handleShiftDate(1)}
               disabled={!canGoNext}
-              className="absolute right-0 text-white/40 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
+              className="absolute right-0 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
             >
               <Image src="/arrow-left-right.svg" alt="Next" width={14} height={24} />
             </button>
@@ -612,63 +747,55 @@ export default function LogPage() {
                   )}
                 </div>
                 
-                <div className="relative overflow-visible" style={{ minHeight: '80px', width: '100%', maxWidth: '600px' }}>
-                  {editingField === metric.key ? (
-                    <input
-                      ref={(el) => { inputRefs.current[metric.key] = el; }}
-                      type="text"
-                      inputMode="decimal"
-                      value={editValues[metric.key]}
-                      onChange={(e) => handleFieldChange(metric.key, e.target.value)}
-                      onBlur={() => handleFieldBlur()}
-                      onKeyDown={(e) => handleFieldKeyDown(metric.key, e)}
-                      className="w-full bg-transparent leading-none text-white outline-none"
-                      style={{ 
-                        fontFamily: '"amplitude-extra-compressed", sans-serif', 
-                        fontWeight: 700, 
-                        letterSpacing: '0.02em',
-                        padding: 0,
-                        margin: 0,
-                        border: 'none',
-                        height: 'auto',
-                        lineHeight: '1',
-                        fontSize: '70px',
-                        minWidth: '400px',
-                        textTransform: 'none'
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleFieldClick(metric.key)}
-                      className="absolute top-0 left-0 text-left leading-none transition hover:text-white/80"
-                      style={{ 
-                        fontFamily: '"amplitude-extra-compressed", sans-serif', 
-                        fontWeight: 700, 
-                        letterSpacing: '0.02em',
-                        padding: 0,
-                        margin: 0,
-                        border: 'none',
-                        background: 'transparent',
-                        lineHeight: '1',
-                        fontSize: '70px',
-                        textTransform: 'none',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {metric.hasValue ? (
-                        <span className="text-white">{displayValue}</span>
-                      ) : (
-                        <span className="text-white/20">{displayValue}</span>
-                      )}
-                    </button>
-                  )}
+                <div className="relative" style={{ minHeight: '80px', width: '100%', maxWidth: '600px' }}>
+                  <input
+                    ref={(el) => { inputRefs.current[metric.key] = el; }}
+                    type="text"
+                    inputMode="decimal"
+                    value={editingField === metric.key ? editValues[metric.key] : displayValue}
+                    onChange={(e) => {
+                      if (editingField === metric.key) {
+                        handleFieldChange(metric.key, e.target.value);
+                      }
+                    }}
+                    onFocus={() => handleFieldFocus(metric.key)}
+                    onBlur={() => handleFieldBlur()}
+                    onKeyDown={(e) => handleFieldKeyDown(metric.key, e)}
+                    className="w-full bg-transparent leading-none outline-none"
+                    style={{ 
+                      fontFamily: '"amplitude-extra-compressed", sans-serif', 
+                      fontWeight: 700, 
+                      letterSpacing: '0.02em',
+                      padding: 0,
+                      margin: 0,
+                      border: 'none',
+                      height: 'auto',
+                      lineHeight: '1',
+                      fontSize: '70px',
+                      minWidth: '100%',
+                      maxWidth: '100%',
+                      textTransform: 'none',
+                      WebkitTapHighlightColor: 'transparent',
+                      color: metric.hasValue || editingField === metric.key ? '#ffffff' : 'rgba(255, 255, 255, 0.2)',
+                      cursor: editingField === metric.key ? 'text' : 'pointer',
+                      caretColor: editingField === metric.key ? '#ffffff' : 'transparent',
+                      userSelect: editingField === metric.key ? 'text' : 'none'
+                    }}
+                  />
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <span
                   className={`px-3 py-1.5 font-medium ${metric.hasValue ? statusColors[metric.status.color] : 'bg-white/40'} text-black`}
-                  style={{ fontFamily: '"amplitude", sans-serif', fontWeight: 300, fontSize: '18px' }}
+                  style={{
+                    fontFamily: '"amplitude", sans-serif',
+                    fontWeight: 300,
+                    fontSize: '18px',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                 >
                   {metric.goalText}
                 </span>

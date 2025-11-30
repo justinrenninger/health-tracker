@@ -1,8 +1,9 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/instantdb';
+import { id as instantId } from '@instantdb/react';
 import { AppTabs } from '@/components/AppTabs';
 
 type UserRecord = {
@@ -56,22 +57,10 @@ const numberOrUndefined = (value: string) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const remindersToInput = (reminders?: unknown): string => {
-  if (!Array.isArray(reminders)) return '';
-  return reminders.join(', ');
-};
-
-const remindersFromInput = (value: string): string[] | undefined => {
-  const parts = value
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return parts.length ? parts : undefined;
-};
-
 export default function SettingsPage() {
   const router = useRouter();
   const auth = db.useAuth();
+  const targetIdRef = useRef<string | null>(null);
 
   const query =
     auth.user && auth.user.id
@@ -94,6 +83,11 @@ export default function SettingsPage() {
   const { data, isLoading } = db.useQuery(query);
   const profile = data?.users?.[0] as UserRecord | undefined;
   const target = data?.targets?.[0] as TargetRecord | undefined;
+  useEffect(() => {
+    if (target?.id) {
+      targetIdRef.current = target.id;
+    }
+  }, [target?.id]);
 
   const [profileStatus, setProfileStatus] = useState<
     'idle' | 'saving' | 'saved' | 'error'
@@ -116,17 +110,12 @@ export default function SettingsPage() {
     setProfileStatus('saving');
     setProfileMessage('');
     const formData = new FormData(event.currentTarget);
-    const displayName = (formData.get('displayName') as string) ?? '';
     const weightGoal = (formData.get('weightGoal') as string) ?? '';
-    const remindersInput = (formData.get('reminderTimes') as string) ?? '';
     try {
       await db.transact(
         db.tx.users[auth.user.id].update({
           authId: auth.user.id,
-          email: auth.user.email ?? profile?.email,
-          displayName: displayName || undefined,
           weightGoal: numberOrUndefined(weightGoal),
-          reminderTimes: remindersFromInput(remindersInput),
         }),
       );
       setProfileStatus('saved');
@@ -144,10 +133,13 @@ export default function SettingsPage() {
     setTargetsMessage('');
     const formData = new FormData(event.currentTarget);
     try {
+      const targetId = target?.id ?? targetIdRef.current ?? instantId();
+      targetIdRef.current = targetId;
       await db.transact(
-        db.tx.targets[`targets-${auth.user.id}`].update({
+        db.tx.targets[targetId].update({
+          id: targetId,
           userId: auth.user.id,
-          effectiveDate: new Date().toISOString().slice(0, 10),
+          effectiveDate: new Date(),
           steps: numberOrUndefined((formData.get('steps') as string) ?? ''),
           calories: numberOrUndefined((formData.get('calories') as string) ?? ''),
           protein: numberOrUndefined((formData.get('protein') as string) ?? ''),
@@ -171,9 +163,7 @@ export default function SettingsPage() {
 
   const profileDefaults = useMemo(
     () => ({
-      displayName: profile?.displayName ?? '',
       weightGoal: profile?.weightGoal?.toString() ?? '',
-      reminderTimes: remindersToInput(profile?.reminderTimes),
     }),
     [profile],
   );
@@ -203,29 +193,26 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-2xl px-4">
         <AppTabs />
 
-        <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold">Profile & reminders</h2>
-              <p className="text-sm text-white/70">
-                Name, weight goal, and notification windows.
-              </p>
+              <h2
+                className="text-white uppercase"
+                style={{
+                  fontFamily: '"amplitude-extra-compressed", sans-serif',
+                  fontWeight: 700,
+                  fontSize: '48px',
+                  letterSpacing: 0,
+                }}
+              >
+                Goal
+              </h2>
             </div>
             {isLoading && (
               <p className="text-xs text-white/50">Loading current values…</p>
             )}
           </div>
           <form className="mt-6 space-y-4" onSubmit={handleProfileSave}>
-            <label className="flex flex-col gap-2 text-sm font-medium text-white/80">
-              Display name
-              <input
-                name="displayName"
-                type="text"
-                defaultValue={profileDefaults.displayName}
-                placeholder="Coach, athlete, etc."
-                className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-base text-white outline-none transition focus:border-indigo-400"
-              />
-            </label>
             <label className="flex flex-col gap-2 text-sm font-medium text-white/80">
               Weight goal (lbs)
               <input
@@ -234,16 +221,6 @@ export default function SettingsPage() {
                 inputMode="decimal"
                 defaultValue={profileDefaults.weightGoal}
                 placeholder="180"
-                className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-base text-white outline-none transition focus:border-indigo-400"
-              />
-            </label>
-            <label className="flex flex-col gap-2 text-sm font-medium text-white/80">
-              Reminder times (comma separated, 24h clock)
-              <input
-                name="reminderTimes"
-                type="text"
-                defaultValue={profileDefaults.reminderTimes}
-                placeholder="07:30, 20:30"
                 className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-base text-white outline-none transition focus:border-indigo-400"
               />
             </label>
@@ -266,13 +243,20 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold">Daily targets</h2>
-              <p className="text-sm text-white/70">
-                Customize the default metrics you see on the log.
-              </p>
+              <h2
+                className="text-white uppercase"
+                style={{
+                  fontFamily: '"amplitude-extra-compressed", sans-serif',
+                  fontWeight: 700,
+                  fontSize: '48px',
+                  letterSpacing: 0,
+                }}
+              >
+                Daily Targets
+              </h2>
             </div>
           </div>
           <form className="mt-6 space-y-4" onSubmit={handleTargetsSave}>
@@ -319,13 +303,20 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold">Sign out</h2>
-              <p className="text-sm text-white/70">
-                Log out if you want to switch accounts or take a break.
-              </p>
+              <h2
+                className="text-white uppercase"
+                style={{
+                  fontFamily: '"amplitude-extra-compressed", sans-serif',
+                  fontWeight: 700,
+                  fontSize: '48px',
+                  letterSpacing: 0,
+                }}
+              >
+                Sign Out
+              </h2>
             </div>
             <button
               onClick={handleSignOut}
