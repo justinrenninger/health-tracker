@@ -236,12 +236,19 @@ export default function LogPage() {
               limit: 1,
             },
           },
+          users: {
+            $: {
+              where: { authId: auth.user.id },
+              limit: 1,
+            },
+          },
         }
       : null;
 
   const { data } = db.useQuery(query);
   const existingEntry = data?.dailyMetrics?.[0] as DailyMetric | undefined;
   const personalTarget = data?.targets?.[0] as TargetRecord | undefined;
+  const userProfile = data?.users?.[0] as { weightGoal?: number } | undefined;
 
   const previousQuery =
     auth.user && auth.user.id
@@ -328,7 +335,7 @@ export default function LogPage() {
         valueText: weightValue != null && weightValue > 0 ? formatNumber(weightValue, 1) : '',
         hasValue: weightValue != null && weightValue > 0,
         placeholderText: previousEntry?.weight != null ? formatNumber(previousEntry.weight, 1) : '',
-        goalText: `${formatNumber(personalTarget?.weightGoal ?? 160)} lbs`,
+        goalText: `${formatNumber(userProfile?.weightGoal ?? 160)} lbs`,
         status: getWeightStatus(weightValue ?? undefined, previousEntry?.weight ?? undefined),
       },
       {
