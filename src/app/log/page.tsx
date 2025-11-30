@@ -225,7 +225,7 @@ export default function LogPage() {
             $: {
               where: {
                 userId: auth.user.id,
-                date: selectedDate,
+                date: new Date(selectedDate),
               },
               limit: 1,
             },
@@ -250,7 +250,7 @@ export default function LogPage() {
             $: {
               where: {
                 userId: auth.user.id,
-                date: addDays(selectedDate, -1),
+                date: new Date(addDays(selectedDate, -1)),
               },
               limit: 1,
             },
@@ -431,7 +431,7 @@ export default function LogPage() {
         ...(existingEntry ?? { id: entryId }),
         id: entryId,
         userId: auth.user.id,
-        date: selectedDate,
+        date: new Date(selectedDate).toISOString(),
         entryKey: existingEntry?.entryKey ?? `${auth.user.id}-${selectedDate}`,
         steps: numericOrNull(getCurrentValue('steps')) ?? undefined,
         calories: numericOrNull(getCurrentValue('calories')) ?? undefined,
